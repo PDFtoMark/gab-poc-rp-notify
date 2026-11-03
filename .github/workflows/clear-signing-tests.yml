@@ -1,0 +1,42 @@
+name: Clear Signing Tests
+
+on:
+  pull_request:
+    paths:
+      - "registry/**/*.json"
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  check-permissions:
+    name: Check permissions
+    runs-on: ubuntu-latest
+    outputs:
+      can_run_tests: ${{ steps.check.outputs.can_run_tests }}
+      is_cross_repo: ${{ steps.check.outputs.is_cross_repo }}
+    steps:
+      - name: Check if tests can run
+        id: check
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.event.pull_request.base.repo.full_name }}
+        run: |
+          IS_CROSS_REPO="false"
+          if [[ "$HEAD_REPO" != "$BASE_REPO" ]]; then IS_CROSS_REPO="true"; fi
+          echo "is_cross_repo=$IS_CROSS_REPO" >> $GITHUB_OUTPUT
+          if [[ "$IS_CROSS_REPO" != "true" ]]; then echo "can_run_tests=true" >> $GITHUB_OUTPUT; else echo "can_run_tests=false" >> $GITHUB_OUTPUT; fi
+      - name: Save PR metadata for cross-repo notification
+        if: steps.check.outputs.is_cross_repo == 'true' && steps.check.outputs.can_run_tests == 'false'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          echo "{\"pr_number\": $PR_NUMBER, \"needs_notification\": true}" > pr-metadata.json
+      - name: Upload PR metadata
+        if: steps.check.outputs.is_cross_repo == 'true' && steps.check.outputs.can_run_tests == 'false'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: pr-metadata
+          path: pr-metadata.json
+          retention-days: 1
